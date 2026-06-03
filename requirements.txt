@@ -1,0 +1,11 @@
+# Instalar con: pip install -r requirements.txt
+PyQt5
+pymongo
+pydicom
+nibabel
+opencv-python
+scipy
+matplotlib
+pandas
+numpy
+pyqt5-tools
