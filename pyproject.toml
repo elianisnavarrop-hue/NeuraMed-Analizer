@@ -1,0 +1,19 @@
+[project]
+name = "neuramed-analizer-main"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.9",
+    "nibabel>=5.4.2",
+    "nilearn>=0.13.1",
+    "notebook>=7.5.7",
+    "opencv-python>=4.13.0.92",
+    "pandas>=3.0.3",
+    "pydicom>=3.0.2",
+    "pyqt5>=5.15.11",
+    "scipy>=1.17.1",
+]
