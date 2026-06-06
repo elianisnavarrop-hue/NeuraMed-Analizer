@@ -1,18 +1,28 @@
-#Punto de entrada de la aplicación
-#Arranca NeuraMed Analyzer
-
 import sys
+import os
 from PyQt5.QtWidgets import QApplication
-from controller.ctrl_login import CtrlBienvenida
+
+# Matplotlib configuration for PyQt5
+os.environ["QT_API"] = "PyQt5"
+import matplotlib
+matplotlib.use('Qt5Agg')
+
+from view.views import (
+    BienvenidaWindow, 
+    LoginWindow, 
+    VentanaAutenticacion, 
+    MainWindow, 
+    VentanaZoom
+)
+from controller.controller import BioMonitorController
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
+    app.setStyle('Fusion')   # Modern look
 
-    # La primera ventana es la de bienvenida
-    ventana = CtrlBienvenida()
-    ventana.show()
+    controller = BioMonitorController()
+    controller.run()   # Starts with BienvenidaWindow
 
     sys.exit(app.exec_())
 
