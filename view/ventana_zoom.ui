@@ -45,7 +45,7 @@
             <item row="0" column="0">
              <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1">
               <item>
-               <widget class="FigureCanvasQTAgg" name="widget_2" native="true">
+               <widget class="QWidget" name="widget_2" native="true">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                   <horstretch>0</horstretch>
@@ -58,15 +58,12 @@
                </widget>
               </item>
               <item>
-               <widget class="FigureCanvasQTAgg" name="widget_3" native="true">
+               <widget class="QWidget" name="widget_3" native="true">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                   <horstretch>0</horstretch>
                   <verstretch>0</verstretch>
                  </sizepolicy>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">background-image: url(:/aat/fondo1.png);</string>
                 </property>
                </widget>
               </item>
@@ -327,14 +324,6 @@ QPushButton#btn_guardar_img:pressed {
    </layout>
   </widget>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>FigureCanvasQTAgg</class>
-   <extends>QWidget</extends>
-   <header>matplotlib.backends.backend_qt5agg</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <resources>
   <include location="ventana_zoom.qrc"/>
  </resources>

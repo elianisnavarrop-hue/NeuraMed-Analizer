@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>812</width>
-    <height>473</height>
+    <width>1980</width>
+    <height>1078</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -772,8 +772,8 @@ QPushButton:pressed {
                <rect>
                 <x>11</x>
                 <y>11</y>
-                <width>709</width>
-                <height>281</height>
+                <width>1880</width>
+                <height>761</height>
                </rect>
               </property>
               <property name="sizePolicy">
@@ -816,7 +816,7 @@ QPushButton:pressed {
              </property>
              <layout class="QGridLayout" name="gridLayout_4">
               <item row="0" column="0">
-               <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,1,1,2,1">
+<layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,1,1,2,1">
                 <item>
                  <layout class="QVBoxLayout" name="verticalLayout_2">
                   <item>
@@ -844,12 +844,10 @@ QPushButton:pressed {
     border-radius: 12px;
     font-size: 12pt;
 }
-
 QPushButton:hover {
-    background-color: rgba(0, 212, 255, 0.3); 
+    background-color: rgba(0, 212, 255, 0.3);
     border: 2px solid #ffffff; 
 }
-
 QPushButton:pressed {
     background-color: #00d4ff; 
     color: black;
@@ -885,12 +883,10 @@ QPushButton:pressed {
     border-radius: 12px;
     font-size: 12pt;
 }
-
 QPushButton:hover {
-    background-color: rgba(0, 212, 255, 0.3); 
+    background-color: rgba(0, 212, 255, 0.3);
     border: 2px solid #ffffff; 
 }
-
 QPushButton:pressed {
     background-color: #00d4ff; 
     color: black;
@@ -906,7 +902,7 @@ QPushButton:pressed {
                 <item>
                  <layout class="QVBoxLayout" name="verticalLayout_3">
                   <item>
-                   <widget class="QLabel" name="titulo_2">
+                   <widget class="QLabel" name="lbl_seleccion_canal">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                       <horstretch>0</horstretch>
@@ -920,12 +916,12 @@ QPushButton:pressed {
                      </font>
                     </property>
                     <property name="text">
-                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Inicio Canal&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Canal a Analizar&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                     </property>
                    </widget>
                   </item>
                   <item>
-                   <widget class="QSpinBox" name="spinBox_3">
+                   <widget class="QSpinBox" name="spin_canal">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                       <horstretch>0</horstretch>
@@ -940,38 +936,36 @@ QPushButton:pressed {
                     </property>
                     <property name="styleSheet">
                      <string notr="true">QSpinBox {
-    background-color: #0d0d0d;        /* Fondo oscuro */
-    border: 1px solid #00FFFF;        /* Borde cian */
-    color: #00FFFF;                   /* Texto cian */
+    background-color: #0d0d0d;
+    border: 1px solid #00FFFF;
+    color: #00FFFF;
     border-radius: 4px;
     padding: 2px;
     selection-background-color: #00FFFF;
     selection-color: #000000;
 }
-
 QSpinBox::up-button {
-    background-color: #1a1a1a;        /* Fondo del botón */
+    background-color: #1a1a1a;
     border: 1px solid #00FFFF;
     subcontrol-origin: border;
-    subcontrol-position: top right;   /* Posición flecha arriba */
+    subcontrol-position: top right;
     width: 16px;
 }
-
 QSpinBox::down-button {
-    background-color: #1a1a1a;        /* Fondo del botón */
+    background-color: #1a1a1a;
     border: 1px solid #00FFFF;
     subcontrol-origin: border;
-    subcontrol-position: bottom right; /* Posición flecha abajo */
+    subcontrol-position: bottom right;
     width: 16px;
 }</string>
                     </property>
                     <property name="maximum">
-                     <number>100</number>
+                     <number>12</number>
                     </property>
                    </widget>
                   </item>
                   <item>
-                   <widget class="QLabel" name="titulo_3">
+                   <widget class="QLabel" name="lbl_rango_muestras">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                       <horstretch>0</horstretch>
@@ -985,55 +979,122 @@ QSpinBox::down-button {
                      </font>
                     </property>
                     <property name="text">
-                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Final Canal&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Rango de Muestras&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                     </property>
                    </widget>
                   </item>
                   <item>
-                   <widget class="QSpinBox" name="spinBox_2">
-                    <property name="sizePolicy">
-                     <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-                      <horstretch>0</horstretch>
-                      <verstretch>0</verstretch>
-                     </sizepolicy>
-                    </property>
-                    <property name="font">
-                     <font>
-                      <family>Arial</family>
-                      <pointsize>10</pointsize>
-                     </font>
-                    </property>
-                    <property name="styleSheet">
-                     <string notr="true">QSpinBox {
-    background-color: #0d0d0d;        /* Fondo oscuro */
-    border: 1px solid #00FFFF;        /* Borde cian */
-    color: #00FFFF;                   /* Texto cian */
+                   <layout class="QHBoxLayout" name="horizontalLayout_rango_muestras">
+                    <item>
+                     <widget class="QSpinBox" name="spin_muestra_inicio">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="font">
+                       <font>
+                        <family>Arial</family>
+                        <pointsize>10</pointsize>
+                       </font>
+                      </property>
+                      <property name="styleSheet">
+                       <string notr="true">QSpinBox {
+    background-color: #0d0d0d;
+    border: 1px solid #00FFFF;
+    color: #00FFFF;
     border-radius: 4px;
     padding: 2px;
     selection-background-color: #00FFFF;
     selection-color: #000000;
 }
-
 QSpinBox::up-button {
-    background-color: #1a1a1a;        /* Fondo del botón */
+    background-color: #1a1a1a;
     border: 1px solid #00FFFF;
     subcontrol-origin: border;
-    subcontrol-position: top right;   /* Posición flecha arriba */
+    subcontrol-position: top right;
     width: 16px;
 }
-
 QSpinBox::down-button {
-    background-color: #1a1a1a;        /* Fondo del botón */
+    background-color: #1a1a1a;
     border: 1px solid #00FFFF;
     subcontrol-origin: border;
-    subcontrol-position: bottom right; /* Posición flecha abajo */
+    subcontrol-position: bottom right;
     width: 16px;
 }</string>
-                    </property>
-                    <property name="maximum">
-                     <number>100</number>
-                    </property>
-                   </widget>
+                      </property>
+                      <property name="maximum">
+                       <number>9999999</number>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_separador_rango">
+                      <property name="font">
+                       <font>
+                        <family>Arial</family>
+                        <pointsize>14</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                       </font>
+                      </property>
+                      <property name="styleSheet">
+                       <string notr="true">color: #00FFFF; background-color: transparent;</string>
+                      </property>
+                      <property name="text">
+                       <string>-</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QSpinBox" name="spin_muestra_fin">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="font">
+                       <font>
+                        <family>Arial</family>
+                        <pointsize>10</pointsize>
+                       </font>
+                      </property>
+                      <property name="styleSheet">
+                       <string notr="true">QSpinBox {
+    background-color: #0d0d0d;
+    border: 1px solid #00FFFF;
+    color: #00FFFF;
+    border-radius: 4px;
+    padding: 2px;
+    selection-background-color: #00FFFF;
+    selection-color: #000000;
+}
+QSpinBox::up-button {
+    background-color: #1a1a1a;
+    border: 1px solid #00FFFF;
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 16px;
+}
+QSpinBox::down-button {
+    background-color: #1a1a1a;
+    border: 1px solid #00FFFF;
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 16px;
+}</string>
+                      </property>
+                      <property name="maximum">
+                       <number>9999999</number>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
                   </item>
                  </layout>
                 </item>
@@ -1163,12 +1224,10 @@ QSpinBox::down-button {
     border-radius: 12px;
     font-size: 12pt;
 }
-
 QPushButton:hover {
-    background-color: rgba(0, 212, 255, 0.3); 
+    background-color: rgba(0, 212, 255, 0.3);
     border: 2px solid #ffffff; 
 }
-
 QPushButton:pressed {
     background-color: #00d4ff; 
     color: black;
@@ -1216,7 +1275,7 @@ QPushButton:pressed {
                     <widget class="QTextEdit" name="textEdit">
                      <property name="font">
                       <font>
-                       <family>Courier</family>
+                       <family>Arial</family>
                       </font>
                      </property>
                      <property name="styleSheet">

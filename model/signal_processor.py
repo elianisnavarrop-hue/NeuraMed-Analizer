@@ -1,117 +1,128 @@
 """
-Procesador de Señales Biomédicas (.mat) - Especializado en EEG
+SignalProcessor - Modelo (MVC)
 """
 
 import scipy.io as sio
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy import signal
 from pathlib import Path
 from typing import Tuple, Optional
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 
 class SignalProcessor:
-    """
-    Clase encargada de cargar, procesar y visualizar señales biomédicas 
-    desde archivos .mat (principalmente EEG).
-    """
-
     def __init__(self):
-        self.data_3d = None      # Matriz original (ensayos, canales, muestras)
-        self.data_2d = None      # Matriz reshapeada (canales, muestras)
-        self.fs = 1000.0         # Frecuencia de muestreo por defecto (1kHz)
+        self.data_3d = None
+        self.data_2d = None
+        self.fs = 1000.0
         self.filename = None
 
     def load_mat_file(self, file_path: str) -> bool:
-        """
-        Carga un archivo .mat y prepara las matrices 3D y 2D.
-        """
         try:
             mat = sio.loadmat(file_path)
             self.filename = Path(file_path).name
 
-            # Buscar la clave principal que contiene la señal
-            key = None
-            for k in mat.keys():
-                if not k.startswith('__') and isinstance(mat[k], np.ndarray) and mat[k].ndim >= 2:
-                    key = k
-                    break
-
-            if key is None:
-                raise ValueError("No se encontró una señal válida en el archivo .mat")
+            key = next((k for k in mat.keys() if not k.startswith('__') 
+                       and isinstance(mat[k], np.ndarray) and mat[k].ndim >= 2), None)
+            if not key:
+                raise ValueError("No se encontró señal válida")
 
             self.data_3d = mat[key]
+            self.data_2d = self.data_3d.reshape(self.data_3d.shape[0], -1) if self.data_3d.ndim == 3 else self.data_3d
 
-            # Convertir a 2D para facilitar el procesamiento de canales
-            if self.data_3d.ndim == 3:
-                self.data_2d = self.data_3d.reshape(self.data_3d.shape[0], -1)
-            else:
-                self.data_2d = self.data_3d
+            if 'fs' in mat:
+                self.fs = float(mat['fs'].flatten()[0])
 
-            print(f"✅ Señal cargada correctamente: {self.filename}")
-            print(f"   Dimensiones 3D: {self.data_3d.shape} | Dimensiones 2D: {self.data_2d.shape}")
+            print(f"✅ Señal cargada: {self.filename} | Shape: {self.data_2d.shape}")
             return True
-
         except Exception as e:
-            print(f"❌ Error al cargar archivo .mat: {e}")
+            print(f"❌ Error: {e}")
             return False
 
-    def select_channel_segment(self, channel: int, start: int, end: int) -> np.ndarray:
-        """Selecciona un segmento de un canal específico."""
-        if self.data_2d is None:
-            return None
-        return self.data_2d[channel, start:end]
-
-    def add_noise_to_channel(self, channel: int, noise_level: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
-        """Añade ruido gaussiano a un canal específico."""
+    def get_signal_segment(self, canal: int = 0, inicio: int = 0, fin: int = None) -> Tuple[np.ndarray, np.ndarray]:
         if self.data_2d is None:
             return None, None
-        
-        original = self.data_2d[channel].copy()
+        fin = fin or self.data_2d.shape[1]
+        segmento = self.data_2d[canal, inicio:fin].copy()
+        tiempo = np.arange(inicio, fin) / self.fs
+        return segmento, tiempo
+
+    def agregar_ruido(self, canal: int = 0, noise_level: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
+        if self.data_2d is None:
+            return None, None
+        original = self.data_2d[canal].copy()
         noise = np.random.normal(0, noise_level * np.std(original), len(original))
         noisy = original + noise
-        
+        self.data_2d[canal] = noisy
         return original, noisy
 
-    def compute_mean_std(self, axis: int = 0) -> Tuple[np.ndarray, np.ndarray]:
-        """Calcula promedio y desviación estándar a lo largo de un eje."""
+    def compute_statistics(self, axis: int = 0) -> Tuple[np.ndarray, np.ndarray, str]:
         if self.data_3d is None:
-            return None, None
+            return None, None, ""
         mean = np.mean(self.data_3d, axis=axis)
         std = np.std(self.data_3d, axis=axis)
-        return mean, std
-
-    def plot_channel(self, channel: int, start: int = 0, end: Optional[int] = None):
-        """Visualiza un canal específico de la señal."""
-        if self.data_2d is None:
-            return
-        segment = self.data_2d[channel, start:end]
-        plt.figure(figsize=(12, 5))
-        plt.plot(segment)
-        plt.title(f"Canal {channel} - {self.filename}")
-        plt.xlabel("Muestras")
-        plt.ylabel("Amplitud (µV)")
-        plt.grid(True)
-        plt.show()
-
-    def plot_mean_std(self):
-        """Grafica promedio y desviación estándar por canal (stem plots)."""
-        if self.data_3d is None:
-            return
-        mean, std = self.compute_mean_std(axis=1)  # Promedio por canal
-
-        fig, axs = plt.subplots(1, 2, figsize=(12, 5))
         
-        axs[0].stem(mean)
-        axs[0].set_title("Promedio por Canal")
-        axs[0].set_xlabel("Canal")
-        axs[0].set_ylabel("Amplitud Media (µV)")
-        axs[0].grid(True)
+        stats_text = f"""Estadísticas (Eje {axis}):
+Promedio:     {mean.mean():.4f} ± {mean.std():.4f}
+Desviación:   {std.mean():.4f} ± {std.std():.4f}
+Máximo:       {np.max(mean):.4f}
+Mínimo:       {np.min(mean):.4f}"""
+        return mean, std, stats_text
 
-        axs[1].stem(std)
-        axs[1].set_title("Desviación Estándar por Canal")
-        axs[1].set_xlabel("Canal")
-        axs[1].set_ylabel("Desviación Estándar (µV)")
-        axs[1].grid(True)
+    def plot_signal(self, canal: int = 0, inicio: int = 0, fin: int = None) -> Figure:
+        """Retorna Figure con la señal"""
+        segmento, tiempo = self.get_signal_segment(canal, inicio, fin)
+        if segmento is None:
+            fig = Figure()
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, "No hay señal cargada", ha='center')
+            return fig
 
-        plt.tight_layout()
-        plt.show()
+        fig = Figure(figsize=(11, 6))
+        ax = fig.add_subplot(111)
+        ax.plot(tiempo, segmento, 'b-', linewidth=1.5, label='Señal')
+        ax.set_title(f"Canal {canal} - {self.filename or 'Señal'}")
+        ax.set_xlabel("Tiempo (segundos)")
+        ax.set_ylabel("Amplitud")
+        ax.grid(True)
+        ax.legend()
+        return fig
+
+    def plot_original_vs_noisy(self, original: np.ndarray, noisy: np.ndarray) -> Figure:
+        """Retorna Figure comparando original vs ruido"""
+        fig = Figure(figsize=(11, 6))
+        ax1 = fig.add_subplot(211)
+        ax1.plot(original, 'b-', label='Original')
+        ax1.set_title("Señal Original")
+        ax1.legend()
+        ax1.grid(True)
+
+        ax2 = fig.add_subplot(212)
+        ax2.plot(noisy, 'r-', label='Con Ruido')
+        ax2.set_title("Señal con Ruido")
+        ax2.legend()
+        ax2.grid(True)
+
+        fig.tight_layout()
+        return fig
+
+    def plot_statistics(self, mean: np.ndarray, std: np.ndarray) -> Figure:
+        """Retorna Figure con estadísticas"""
+        fig = Figure(figsize=(11, 5))
+        ax1 = fig.add_subplot(121)
+        ax1.stem(mean)
+        ax1.set_title("Media por Canal / Muestra")
+
+        ax2 = fig.add_subplot(122)
+        ax2.stem(std)
+        ax2.set_title("Desviación Estándar")
+
+        fig.tight_layout()
+        return fig
+
+    def get_channel_count(self) -> int:
+        return self.data_2d.shape[0] if self.data_2d is not None else 0
+
+    def get_sample_count(self) -> int:
+        return self.data_2d.shape[1] if self.data_2d is not None else 0
