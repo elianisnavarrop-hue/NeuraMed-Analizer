@@ -7,10 +7,10 @@ from PyQt5.QtWidgets import (
     QMainWindow, QMessageBox, QFileDialog, QPushButton, 
     QLabel, QTableWidget, QLineEdit, QSlider, QComboBox, 
     QSpinBox, QRadioButton, QTextEdit, QWidget, QVBoxLayout,
-    QTableWidgetItem, QListWidget
+    QTableWidgetItem, QListWidget, QDoubleSpinBox, QLabel
 )
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
+from PyQt5.QtCore import Qt, QRect, QTimer
 import numpy as np
 import cv2
 
@@ -47,12 +47,52 @@ class VentanaAutenticacion(QMainWindow):
         super().__init__()
         uic.loadUi("view/ventana_autenticador.ui", self)
         self.controller = controller
-        self.boton_guardar_foto.clicked.connect(self.capturar_foto)
 
-    def capturar_foto(self):
-        QMessageBox.information(self, "Info", "Foto capturada (simulado)")
-        self.close()
-        self.controller.abrir_ventana_principal()
+        self._encontrar_widgets()
+        self._conectar_señales()
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.actualizar_frame_camara)
+
+        # Iniciar cámara automáticamente al abrir la ventana
+        self.iniciar_camara()
+
+    def _encontrar_widgets(self):
+        self.visualizador_camara = self.findChild(QLabel, "visualizador_camara")
+        self.boton_guardar_foto = self.findChild(QPushButton, "boton_guardar_foto")
+        self.lbltitulo = self.findChild(QLabel, "lbltitulo")
+
+    def _conectar_señales(self):
+        if self.boton_guardar_foto:
+            self.boton_guardar_foto.clicked.connect(self.controller.guardar_foto_autenticacion)
+
+    def iniciar_camara(self):
+        """Inicia la cámara y el timer de actualización"""
+        if self.controller.modelo_camara.iniciar_camara():
+            self.timer.start(30)  # ~33 FPS
+            print("✅ Cámara iniciada en ventana de autenticación")
+        else:
+            QMessageBox.warning(self, "Error", "No se pudo acceder a la cámara")
+
+    def actualizar_frame_camara(self):
+        """Actualiza el QLabel con el frame en vivo"""
+        exito, frame_rgb = self.controller.modelo_camara.get_frame()
+        if exito and frame_rgb is not None and self.visualizador_camara:
+            h, w, ch = frame_rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg).scaled(
+                self.visualizador_camara.size(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            self.visualizador_camara.setPixmap(pixmap)
+
+    def closeEvent(self, event):
+        """Detener cámara al cerrar la ventana"""
+        self.timer.stop()
+        self.controller.modelo_camara.detener_camara()
+        event.accept()
         
 class MainWindow(QMainWindow):
     def __init__(self, controller):
@@ -78,17 +118,22 @@ class MainWindow(QMainWindow):
         self.btn_aplicar_transformacion = self.findChild(QPushButton, "btn_aplicar_transformacion")
 
         self.label_axial = self.findChild(QLabel, "label_axial")
-        self.label_sagital = self.findChild(QLabel, "label_sagital")
         self.label_coronal = self.findChild(QLabel, "label_coronal")
+        self.label_sagital = self.findChild(QLabel, "label_sagital")
+
         self.tableWidget_2 = self.findChild(QTableWidget, "tableWidget_2")
 
         self.slider_axial = self.findChild(QSlider, "slider_axial")
-        self.slider_sagital = self.findChild(QSlider, "slider_sagital")
         self.slider_coronal = self.findChild(QSlider, "slider_coronal")
+        self.slider_sagital = self.findChild(QSlider, "slider_sagital")
 
-        self.seleccion_segmentacion = self.findChild(QComboBox, "seleccion_segmentacion")
+        # Procesamiento
+        self.seleccion_segmentacion = self.findChild(QComboBox, "seleccion_segmentacion")  # Filtros
         self.seleccion_morfo = self.findChild(QComboBox, "seleccion_morfo")
         self.spinkernel = self.findChild(QSpinBox, "spinkernel")
+
+        # Estado
+        self.lblEstadoConversion = self.findChild(QLabel, "lblEstadoConversion")  # o lbl_archvio_convertido
 
         # Señales
         self.btn_cargar_senal = self.findChild(QPushButton, "btn_cargar_senal")
@@ -125,11 +170,30 @@ class MainWindow(QMainWindow):
         if self.boton_senales: self.boton_senales.clicked.connect(self.controller.mostrar_modulo_senales)
         if self.boton_datos: self.boton_datos.clicked.connect(self.controller.mostrar_modulo_datos)
 
-        # Imágenes
-        if self.btn_cargar_dicom: self.btn_cargar_dicom.clicked.connect(self.controller.cargar_carpeta_dicom)
-        if self.btn_cargar_nifti: self.btn_cargar_nifti.clicked.connect(self.controller.convertir_a_nifti)
-        if self.btn_zoom: self.btn_zoom.clicked.connect(self.controller.abrir_ventana_zoom)
-        if self.btn_aplicar_transformacion: self.btn_aplicar_transformacion.clicked.connect(self.controller.aplicar_transformacion)
+        # Imágenes - DICOM
+        if self.btn_cargar_dicom:
+            self.btn_cargar_dicom.clicked.connect(self.controller.cargar_carpeta_dicom)
+        if self.btn_cargar_nifti:
+            self.btn_cargar_nifti.clicked.connect(self.controller.convertir_a_nifti)
+        if self.btn_zoom:
+            self.btn_zoom.clicked.connect(self.controller.abrir_ventana_zoom)
+        if self.btn_aplicar_transformacion:
+            self.btn_aplicar_transformacion.clicked.connect(self.controller.aplicar_transformacion)
+
+        # Procesamiento en tiempo real
+        if self.seleccion_segmentacion:
+            self.seleccion_segmentacion.currentIndexChanged.connect(self.controller.aplicar_transformacion)
+        if self.seleccion_morfo:
+            self.seleccion_morfo.currentIndexChanged.connect(self.controller.aplicar_transformacion)
+
+
+        # Sliders
+        if self.slider_axial:
+            self.slider_axial.valueChanged.connect(self.controller.actualizar_corte_axial)
+        if self.slider_coronal:
+            self.slider_coronal.valueChanged.connect(self.controller.actualizar_corte_coronal)
+        if self.slider_sagital:
+            self.slider_sagital.valueChanged.connect(self.controller.actualizar_corte_sagital)
 
         # Señales
         if self.btn_cargar_senal: self.btn_cargar_senal.clicked.connect(self.controller.cargar_senal)
@@ -191,7 +255,7 @@ class MainWindow(QMainWindow):
                 ax.plot(line.get_xdata(), line.get_ydata(),
                         color=line.get_color(),
                         linestyle=line.get_linestyle(),
-                        linewidth=line.get_linewidth(),
+                        linewidth=line.get_linewidth() or 1.8,
                         label=line.get_label())
 
             # Copiar stems (usado en estadísticas)
@@ -203,13 +267,13 @@ class MainWindow(QMainWindow):
                         ax.stem([s.mean() for s in segments], 
                                linefmt='b-', markerfmt='bo', basefmt='k-')
 
-            ax.set_title(ax_orig.get_title())
-            ax.set_xlabel(ax_orig.get_xlabel())
-            ax.set_ylabel(ax_orig.get_ylabel())
-            ax.grid(True)
+            ax.set_title(ax_orig.get_title(), fontsize=14, fontweight='bold')
+            ax.set_xlabel(ax_orig.get_xlabel(), fontsize=12, fontweight='bold')
+            ax.set_ylabel(ax_orig.get_ylabel(), fontsize=12, fontweight='bold')
+            ax.grid(True, alpha=0.3)
             
             if ax_orig.get_legend():
-                ax.legend()
+                ax.legend(fontsize=11)
 
         self.figure_senal.tight_layout()
         self.canvas_senal.draw()
@@ -267,36 +331,204 @@ class MainWindow(QMainWindow):
             print("✅ Conexión boton_datos OK")
     
 class VentanaZoom(QMainWindow):
+    """Ventana de Zoom y Recorte - Versión con escalado forzado"""
+
     def __init__(self, dicom_model):
         super().__init__()
         uic.loadUi("view/ventana_zoom.ui", self)
         self.dicom_model = dicom_model
+        
+        self.original_image = None
+        self.current_roi = None
+        self.indice_axial = 0
+        self.drawing = False
+        self.start_point = None
+        self.end_point = None
+        self.original_pixmap = None
+
+        self.label_original = None
+        self.label_zoom = None
+
+        self._encontrar_widgets()
+        self._conectar_botones()
+        self._setup_mouse_interaction()
+
+    def _encontrar_widgets(self):
+        self.widget_original = self.findChild(QWidget, "widget_2")
+        self.widget_zoom = self.findChild(QWidget, "widget_3")
 
         self.btn_aplicar_zoom = self.findChild(QPushButton, "btn_aplicar_zoom")
         self.btn_guardar_img = self.findChild(QPushButton, "btn_guardar_img")
         self.nombre_archivo = self.findChild(QLineEdit, "nombre_archivo")
 
+        self.lbl_pixel = self.findChild(QLabel, "lblpixel")
+        self.lbl_slice = self.findChild(QLabel, "lblslice")
+
+    def _conectar_botones(self):
         if self.btn_aplicar_zoom:
-            self.btn_aplicar_zoom.clicked.connect(self.aplicar_zoom)
+            self.btn_aplicar_zoom.clicked.connect(self.aplicar_zoom_y_dibujar)
         if self.btn_guardar_img:
             self.btn_guardar_img.clicked.connect(self.guardar_imagen)
 
-    def mostrar_imagen(self, corte):
+    def _setup_mouse_interaction(self):
+        if not self.widget_original:
+            return
+
+        self.label_original = QLabel(self.widget_original)
+        layout = QVBoxLayout(self.widget_original)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.label_original)
+        self.label_original.setAlignment(Qt.AlignCenter)
+        self.label_original.setScaledContents(False)   # Importante
+        self.label_original.setMouseTracking(True)
+
+        self.label_original.mousePressEvent = self.mouse_press
+        self.label_original.mouseMoveEvent = self.mouse_move
+        self.label_original.mouseReleaseEvent = self.mouse_release
+
+    def mostrar_imagen(self, corte, indice_axial=0):
+        self.indice_axial = indice_axial
+        self.original_image = corte.copy()
+
         try:
             img_u8 = self.dicom_model.normalizar_uint8(corte)
             img_bgr = cv2.cvtColor(img_u8, cv2.COLOR_GRAY2BGR)
             h, w = img_bgr.shape[:2]
             qimg = QImage(img_bgr.data, w, h, w*3, QImage.Format_RGB888)
-            pixmap = QPixmap.fromImage(qimg)
-            label = self.findChild(QLabel, "widget_2")
-            if label:
-                label.setPixmap(pixmap.scaled(label.size(), Qt.KeepAspectRatio))
-        except Exception as e:
-            print("Error mostrando imagen en zoom:", e)
+            self.original_pixmap = QPixmap.fromImage(qimg)
 
-    def aplicar_zoom(self):
-        QMessageBox.information(self, "Info", "Función de Zoom en desarrollo")
+            # Forzar escalado inmediato y después del resize
+            self._update_displayed_image()
+            
+            # Conectar evento de resize para que se actualice si la ventana cambia de tamaño
+            self.widget_original.resizeEvent = self._on_original_resize
+
+            # Metadatos
+            if self.lbl_pixel and self.dicom_model.pixel_spacing:
+                ps = self.dicom_model.pixel_spacing
+                self.lbl_pixel.setText(f"Pixel Spacing (X,Y): {ps[0]:.2f} x {ps[1]:.2f} mm")
+            if self.lbl_slice:
+                self.lbl_slice.setText(f"Slice Thickness: {self.dicom_model.slice_thickness:.2f} mm")
+
+        except Exception as e:
+            print(f"Error en mostrar_imagen: {e}")
+
+    def _update_displayed_image(self):
+        """Escala la imagen para que ocupe todo el espacio disponible"""
+        if not self.original_pixmap or not self.label_original:
+            return
+
+        # Escalar manteniendo proporción y llenando el widget
+        scaled = self.original_pixmap.scaled(
+            self.widget_original.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.label_original.setPixmap(scaled)
+
+    def _on_original_resize(self, event):
+        """Se llama cuando el widget cambia de tamaño"""
+        self._update_displayed_image()
+        # Llamar al resize original si es necesario
+        if hasattr(QWidget, 'resizeEvent'):
+            QWidget.resizeEvent(self.widget_original, event)
+
+    # ==================== MOUSE ROI ====================
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton and self.label_original.pixmap():
+            self.drawing = True
+            self.start_point = event.pos()
+
+    def mouse_move(self, event):
+        if self.drawing and self.start_point:
+            self.end_point = event.pos()
+            self._draw_temporary_roi()
+
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.drawing:
+            self.drawing = False
+            self.end_point = event.pos()
+            self._finalize_roi()
+
+    def _draw_temporary_roi(self):
+        if not (self.start_point and self.end_point):
+            return
+        temp_pixmap = self.original_pixmap.copy()
+        painter = QPainter(temp_pixmap)
+        painter.setPen(QPen(QColor(0, 255, 255), 3, Qt.SolidLine))
+        rect = QRect(self.start_point, self.end_point).normalized()
+        painter.drawRect(rect)
+        painter.end()
+
+        scaled = temp_pixmap.scaled(self.widget_original.size(), Qt.KeepAspectRatio)
+        self.label_original.setPixmap(scaled)
+
+    def _finalize_roi(self):
+        if not (self.start_point and self.end_point):
+            return
+
+        scaled_pixmap = self.label_original.pixmap()
+        if not scaled_pixmap:
+            return
+
+        scale_x = self.original_pixmap.width() / scaled_pixmap.width()
+        scale_y = self.original_pixmap.height() / scaled_pixmap.height()
+
+        x1 = int(self.start_point.x() * scale_x)
+        y1 = int(self.start_point.y() * scale_y)
+        x2 = int(self.end_point.x() * scale_x)
+        y2 = int(self.end_point.y() * scale_y)
+
+        x = min(x1, x2)
+        y = min(y1, y2)
+        ancho = abs(x2 - x1)
+        alto = abs(y2 - y1)
+
+        if ancho < 20 or alto < 20:
+            QMessageBox.warning(self, "Error", "El ROI es demasiado pequeño")
+            return
+
+        self.current_roi = (x, y, ancho, alto)
+        QMessageBox.information(self, "ROI Seleccionado", 
+                              f"Región: {ancho}×{alto} píxeles\nPosición: ({x}, {y})")
+
+    # ==================== Zoom y Guardar ====================
+    def aplicar_zoom_y_dibujar(self):
+        if not self.current_roi or self.original_image is None:
+            QMessageBox.warning(self, "Error", "Primero dibuja un ROI con el mouse")
+            return
+
+        x, y, ancho, alto = self.current_roi
+        recorte = self.original_image[y:y+alto, x:x+ancho]
+        recorte_u8 = self.dicom_model.normalizar_uint8(recorte)
+        recorte_zoom = cv2.resize(recorte_u8, (int(ancho * 3), int(alto * 3)), cv2.INTER_LINEAR)
+
+        img_zoom_bgr = cv2.cvtColor(recorte_zoom, cv2.COLOR_GRAY2BGR)
+        qimg_zoom = QImage(img_zoom_bgr.data, img_zoom_bgr.shape[1], img_zoom_bgr.shape[0], 
+                          img_zoom_bgr.shape[1]*3, QImage.Format_RGB888)
+
+        if not self.label_zoom:
+            self.label_zoom = QLabel(self.widget_zoom)
+            layout = QVBoxLayout(self.widget_zoom)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(self.label_zoom)
+
+        scaled_zoom = QPixmap.fromImage(qimg_zoom).scaled(
+            self.widget_zoom.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.label_zoom.setPixmap(scaled_zoom)
 
     def guardar_imagen(self):
-        nombre = self.nombre_archivo.text().strip() or "recorte_dicom"
-        QMessageBox.information(self, "Guardado", f"Imagen guardada como: {nombre}.png")
+        if not self.current_roi or self.original_image is None:
+            QMessageBox.warning(self, "Error", "Primero selecciona un ROI")
+            return
+
+        nombre = self.nombre_archivo.text().strip() or f"recorte_axial_{self.indice_axial}"
+        try:
+            x, y, ancho, alto = self.current_roi
+            recorte = self.original_image[y:y+alto, x:x+ancho]
+            recorte_u8 = self.dicom_model.normalizar_uint8(recorte)
+            ruta = f"{nombre}.png"
+            cv2.imwrite(ruta, recorte_u8)
+            QMessageBox.information(self, "Éxito", f"Imagen guardada como:\n{ruta}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al guardar: {e}")

@@ -7,6 +7,8 @@ from model.modelo_dicom import ModeloDICOM
 from model.signal_processor import SignalProcessor
 from model.tabular_processor import TabularProcessor
 from model.database import DatabaseManager
+from model.modelo_camara import ModeloCamara
+from model.modelo_usuario import ModeloUsuario
 
 from view.views import (
     BienvenidaWindow, LoginWindow, VentanaAutenticacion, 
@@ -19,6 +21,8 @@ class BioMonitorController:
 
     def __init__(self):
         self.db = DatabaseManager()
+        self.modelo_usuario = ModeloUsuario()
+        self.modelo_camara = ModeloCamara()
         self.dicom_model = ModeloDICOM()
         self.signal_proc = SignalProcessor()
         self.tabular_proc = TabularProcessor()
@@ -40,9 +44,15 @@ class BioMonitorController:
         self.login_window.show()
 
     def validar_login(self, username: str, password: str):
+        # Login con SQLite (ya existente)
         if self.db.login(username, password):
-            self.login_window.close()
-            self.mostrar_autenticacion()
+            # Sincronizar con ModeloUsuario (MongoDB)
+            if self.modelo_usuario.validar_login(username, password):
+                self.login_window.close()
+                self.mostrar_autenticacion()
+            else:
+                QMessageBox.warning(self.login_window, "Error", 
+                                  "Error al sincronizar usuario en MongoDB")
         else:
             QMessageBox.warning(self.login_window, "Error", "Usuario o contraseña incorrectos.")
 
@@ -50,13 +60,43 @@ class BioMonitorController:
         self.autenticacion = VentanaAutenticacion(self)
         self.autenticacion.show()
 
+    def guardar_foto_autenticacion(self):
+        """Captura foto, guarda y registra sesión en MongoDB"""
+        try:
+            # Obtener usuario activo desde ModeloUsuario (MongoDB)
+            usuario_activo = self.modelo_usuario.get_usuario_activo()
+            if not usuario_activo:
+                QMessageBox.warning(self.autenticacion, "Error", "No hay usuario activo")
+                return
+
+            nombre_usuario = usuario_activo.get("nombre", "usuario")
+
+            # Capturar y guardar foto
+            ruta_foto = self.modelo_camara.capturar_y_guardar(nombre_usuario)
+
+            # Registrar sesión
+            self.modelo_usuario.registrar_sesion(ruta_foto)
+
+            QMessageBox.information(self.autenticacion, "Éxito", 
+                                  f"✅ Fotografía guardada correctamente\n"
+                                  f"Usuario: {nombre_usuario}")
+
+            # Cerrar autenticación y abrir principal
+            if self.autenticacion:
+                self.autenticacion.close()
+            self.abrir_ventana_principal()
+
+        except Exception as e:
+            QMessageBox.critical(self.autenticacion, "Error", 
+                               f"No se pudo guardar la foto:\n{str(e)}")
+
     def abrir_ventana_principal(self):
         self.main_window = MainWindow(self)
         if self.autenticacion:
             self.autenticacion.close()
         self.main_window.show()
 
-    # ====================== NAVEGACIÓN ROBUSTA ======================
+    # ====================== NAVEGACIÓN PESTAÑAS VENTANA PRINCIPAL ======================
     def mostrar_modulo_imagenes(self):
         if self.main_window and hasattr(self.main_window, 'stackedWidget_principal'):
             self.main_window.stackedWidget_principal.setCurrentIndex(0)
@@ -75,27 +115,34 @@ class BioMonitorController:
     # ====================== MÓDULOS IMAGENES ======================
     def cargar_carpeta_dicom(self):
         folder = QFileDialog.getExistingDirectory(self.main_window, "Seleccionar carpeta DICOM")
-        if not folder: return
+        if not folder:
+            return
         try:
-            self.dicom_model.cargar_dicom(folder)
-            axial = self.dicom_model.get_corte_axial(self.dicom_model.volumen_3d.shape[0] // 2)
-            coronal = self.dicom_model.get_corte_coronal(self.dicom_model.volumen_3d.shape[1] // 2)
-            sagittal = self.dicom_model.get_corte_sagital(self.dicom_model.volumen_3d.shape[2] // 2)
+            shape = self.dicom_model.cargar_dicom(folder)
+
+            # Mostrar planos centrales
+            axial = self.dicom_model.get_corte_axial(shape[0]//2)
+            coronal = self.dicom_model.get_corte_coronal(shape[1]//2)
+            sagittal = self.dicom_model.get_corte_sagital(shape[2]//2)
 
             self.main_window.show_3_planes(axial, coronal, sagittal)
             self.main_window.mostrar_metadatos(self.dicom_model.metadata)
 
             # Configurar sliders
-            if hasattr(self.main_window, 'slider_axial'):
-                self.main_window.slider_axial.setMaximum(self.dicom_model.volumen_3d.shape[0]-1)
-                self.main_window.slider_axial.setValue(self.dicom_model.volumen_3d.shape[0]//2)
+            self.main_window.slider_axial.setMaximum(shape[0]-1)
+            self.main_window.slider_coronal.setMaximum(shape[1]-1)
+            self.main_window.slider_sagital.setMaximum(shape[2]-1)
+
+            self.main_window.slider_axial.setValue(shape[0]//2)
+            self.main_window.slider_coronal.setValue(shape[1]//2)
+            self.main_window.slider_sagital.setValue(shape[2]//2)
 
             QMessageBox.information(self.main_window, "Éxito", 
-                                  f"✅ DICOM cargado correctamente\n"
-                                  f"Dimensiones: {self.dicom_model.volumen_3d.shape}")
+                                  f"DICOM cargado correctamente\n"
+                                  f"Volumen: {shape} | Cortes: {len(self.dicom_model.archivos_dcm)}")
 
         except Exception as e:
-            QMessageBox.critical(self.main_window, "Error", f"No se pudo cargar el DICOM:\n{str(e)}")
+            QMessageBox.critical(self.main_window, "Error", f"Error al cargar DICOM:\n{str(e)}")
 
     def actualizar_corte_axial(self, valor):
         if not self.main_window or self.dicom_model.volumen_3d is None:
@@ -115,47 +162,136 @@ class BioMonitorController:
         corte = self.dicom_model.get_corte_coronal(valor)
         self.main_window.label_coronal.setPixmap(self.main_window._numpy_to_qpixmap(corte))
 
-    def abrir_ventana_zoom(self):
-        if not getattr(self.dicom_model, 'volumen_3d', None):
-            QMessageBox.warning(self.main_window, "Advertencia", "Cargue primero un DICOM")
-            return
-        self.zoom_window = VentanaZoom(self.dicom_model)
-        corte = self.dicom_model.get_corte_axial(self.dicom_model.volumen_3d.shape[0] // 2)
-        self.zoom_window.mostrar_imagen(corte)
-        self.zoom_window.show()
-
-    def convertir_a_nifti(self):
-        if not self.dicom_model.volumen_3d:
-            QMessageBox.warning(self.main_window, "Advertencia", "Cargue primero un DICOM")
-            return
-        path, _ = QFileDialog.getSaveFileName(self.main_window, "Guardar NIfTI", "", "NIfTI (*.nii.gz)")
-        if path:
-            self.dicom_model.convertir_a_nifti(path)
-            QMessageBox.information(self.main_window, "Éxito", f"Guardado en:\n{path}")
-
-    def aplicar_transformacion(self):
-        """Aplica segmentación o transformación morfológica"""
+    def aplicar_procesamiento(self):
+        """Aplica filtros/segmentación en tiempo real"""
         if self.dicom_model.volumen_3d is None:
-            QMessageBox.warning(self.main_window, "Advertencia", "Cargue primero un estudio DICOM")
+            return
+
+        tipo = self.main_window.seleccion_segmentacion.currentText()
+        if tipo == "Seleccione una opcion..." or tipo == "":
             return
 
         try:
-            indice = 0 
+            idx = self.main_window.slider_axial.value()  # Usamos el corte axial actual
+            resultado = self.dicom_model.segmentar(idx, tipo)
+
+            # Actualizar solo el plano axial (más eficiente)
+            self.main_window.label_axial.setPixmap(
+                self.main_window._numpy_to_qpixmap(resultado)
+            )
+            QMessageBox.information(self.main_window, "Procesado", f"Aplicado: {tipo}")
+        except Exception as e:
+            QMessageBox.warning(self.main_window, "Error", str(e))
+
+    def aplicar_morfologia(self):
+        """Aplica transformación morfológica"""
+        if self.dicom_model.volumen_3d is None:
+            return
+
+        tipo = self.main_window.seleccion_morfo.currentText()
+        if tipo == "Seleccione una transformacion Morfologica..." or tipo == "":
+            return
+
+        kernel_size = self.main_window.spinkernel.value()
+
+        try:
+            idx = self.main_window.slider_axial.value()
+            resultado = self.dicom_model.transformacion_morfologica(idx, tipo, kernel_size)
+
+            self.main_window.label_axial.setPixmap(
+                self.main_window._numpy_to_qpixmap(resultado)
+            )
+        except Exception as e:
+            QMessageBox.warning(self.main_window, "Error", str(e))
+
+    def aplicar_transformacion(self):
+        """Aplica segmentación o transformación morfológica según selección"""
+        if self.dicom_model.volumen_3d is None:
+            QMessageBox.warning(self.main_window, "Advertencia", "Primero cargue un estudio DICOM")
+            return
+
+        try:
+            # Usamos el corte axial actual
+            indice = self.main_window.slider_axial.value() if hasattr(self.main_window, 'slider_axial') else 0
+
             tipo_seg = self.main_window.seleccion_segmentacion.currentText()
             tipo_morfo = self.main_window.seleccion_morfo.currentText()
             kernel = self.main_window.spinkernel.value() if hasattr(self.main_window, 'spinkernel') else 3
 
-            if tipo_seg and tipo_seg != "Seleccione una opcion...":
+            resultado = None
+            mensaje = ""
+
+            if tipo_seg and tipo_seg not in ["Seleccione una opcion...", ""]:
                 resultado = self.dicom_model.segmentar(indice, tipo_seg)
-                QMessageBox.information(self.main_window, "Éxito", f"Segmentación aplicada: {tipo_seg}")
-                
-            elif tipo_morfo and tipo_morfo != "Seleccione una transformacion Morfologica...":
+                mensaje = f"Segmentación aplicada: {tipo_seg}"
+
+            elif tipo_morfo and tipo_morfo not in ["Seleccione una transformacion Morfologica...", ""]:
                 resultado = self.dicom_model.transformacion_morfologica(indice, tipo_morfo, kernel)
-                QMessageBox.information(self.main_window, "Éxito", f"Morfología aplicada: {tipo_morfo} (Kernel {kernel}px)")
+                mensaje = f"Morfología aplicada: {tipo_morfo} (Kernel {kernel}px)"
+
             else:
-                QMessageBox.warning(self.main_window, "Advertencia", "Seleccione un tipo de transformación")
+                QMessageBox.warning(self.main_window, "Advertencia", "Seleccione un tipo de procesamiento")
+                return
+
+            if resultado is not None:
+                # Actualizar solo el plano axial (el que el usuario está viendo)
+                self.main_window.label_axial.setPixmap(
+                    self.main_window._numpy_to_qpixmap(resultado)
+                )
+                QMessageBox.information(self.main_window, "Éxito", mensaje)
+
         except Exception as e:
             QMessageBox.critical(self.main_window, "Error", f"Error al aplicar transformación:\n{str(e)}")
+
+    def convertir_a_nifti(self):
+        """Convierte el volumen cargado a formato NIfTI con extensión correcta"""
+        if self.dicom_model.volumen_3d is None:
+            QMessageBox.warning(self.main_window, "Advertencia", 
+                              "Primero cargue un estudio DICOM")
+            return
+
+        # Sugerir nombre con extensión correcta
+        default_name = "volumen_dicom.nii.gz"
+        
+        path, _ = QFileDialog.getSaveFileName(
+            self.main_window, 
+            "Guardar como NIfTI", 
+            default_name, 
+            "NIfTI (*.nii.gz);;NIfTI (*.nii)"
+        )
+        
+        if not path:
+            return
+
+        # Asegurar extensión correcta
+        if not path.lower().endswith(('.nii', '.nii.gz')):
+            path += '.nii.gz'
+
+        try:
+            ruta = self.dicom_model.convertir_a_nifti(path)
+            QMessageBox.information(self.main_window, "Éxito", 
+                                  f"NIfTI guardado correctamente en:\n{ruta}")
+        except Exception as e:
+            QMessageBox.critical(self.main_window, "Error", 
+                               f"No se pudo guardar el NIfTI:\n{str(e)}")
+
+    def abrir_ventana_zoom(self):
+        """Abre ventana de zoom con el corte axial actual"""
+        if self.dicom_model.volumen_3d is None:
+            QMessageBox.warning(self.main_window, "Advertencia", 
+                              "Cargue primero un estudio DICOM")
+            return
+
+        try:
+            indice = self.main_window.slider_axial.value() if hasattr(self.main_window, 'slider_axial') else 0
+            corte = self.dicom_model.get_corte_axial(indice)
+
+            self.zoom_window = VentanaZoom(self.dicom_model)
+            self.zoom_window.mostrar_imagen(corte, indice)
+            self.zoom_window.show()
+        except Exception as e:
+            QMessageBox.critical(self.main_window, "Error", 
+                               f"No se pudo abrir la ventana de zoom:\n{str(e)}")
 
     # ====================== MÓDULO SEÑALES ======================
     def cargar_senal(self):
@@ -190,7 +326,6 @@ class BioMonitorController:
             QMessageBox.critical(self.main_window, "Error", "No se pudo cargar el archivo .mat")
 
     def actualizar_plot_senal(self):
-        """Actualiza el gráfico cuando cambian los SpinBox"""
         if not self.main_window or self.signal_proc.data_2d is None:
             return
 
@@ -198,11 +333,13 @@ class BioMonitorController:
         inicio = self.main_window.spin_muestra_inicio.value()
         fin = self.main_window.spin_muestra_fin.value()
 
-        # Validar rango
         if fin <= inicio:
             fin = inicio + 1000
 
-        fig = self.signal_proc.plot_signal(canal, inicio, fin)
+        # Detectar eventos automáticamente
+        self.signal_proc.detect_events(canal, signal_type="ECG")
+
+        fig = self.signal_proc.plot_signal(canal, inicio, fin, detect_events=True)
         self.main_window.show_figure(fig)
 
     def agregar_ruido(self):
@@ -211,10 +348,22 @@ class BioMonitorController:
             return
 
         canal = self.main_window.spin_canal.value()
-        original, noisy = self.signal_proc.agregar_ruido(canal)
+        inicio = self.main_window.spin_muestra_inicio.value()
+        fin = self.main_window.spin_muestra_fin.value()
 
-        fig = self.signal_proc.plot_original_vs_noisy(original, noisy)
+        if fin <= inicio:
+            fin = inicio + 1000
+
+        # Aplicar ruido persistentemente
+        original, noisy = self.signal_proc.agregar_ruido(canal, noise_level=0.22)
+
+        # Graficar
+        fig = self.signal_proc.plot_original_vs_noisy(canal, inicio, fin, noise_level=0.22)
         self.main_window.show_figure(fig)
+
+        QMessageBox.information(self.main_window, "Ruido Aplicado", 
+                              f"Ruido aplicado correctamente en Canal {canal}\n"
+                              f"Nivel: 22% | Rango: {inicio}-{fin} muestras")
 
     def calcular_estadisticas(self):
         if self.signal_proc.data_3d is None:
@@ -224,8 +373,21 @@ class BioMonitorController:
         eje = 0 if self.main_window.eje_0.isChecked() else 1
         mean, std, stats_text = self.signal_proc.compute_statistics(axis=eje)
 
-        self.main_window.update_statistics_text(stats_text)
+        # Aplicar formato visible
+        if hasattr(self.main_window, 'result_estadis'):
+            self.main_window.result_estadis.setStyleSheet("""
+                QTextEdit {
+                    background-color: #1e1e1e;
+                    color: #00ffcc;
+                    font-family: Arial;
+                    font-size: 11pt;
+                    padding: 8px;
+                    border: 1px solid #00d4ff;
+                }
+            """)
+            self.main_window.result_estadis.setPlainText(stats_text)
 
+        # Actualizar gráfico
         fig = self.signal_proc.plot_statistics(mean, std)
         self.main_window.show_figure(fig)
          
