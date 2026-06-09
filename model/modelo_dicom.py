@@ -121,6 +121,22 @@ class ModeloDICOM:
         if img_max - img_min == 0:
             return np.zeros_like(img, dtype=np.uint8)
         return ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+    
+    #Segmentación 
+    def segmentar (self, indice_axial, tipo_binarizacion):
+        corte = self.get_corte_axial(indice_axial)
+        corte_u8 = self.normalizar_uint8(corte)
+
+        tipos = {
+            "Binario": cv2.THRESH_BINARY,
+            "Binario Invertido": cv2.THRESH_BINARY_INV,
+            "Truncado": cv2.THRESH_TRUNC,
+            "Tozero": cv2.THRESH_TOZERO,
+            "Tozero Invertido": cv2.THRESH_TOZERO_INV, 
+        }
+        tipo = tipos.get(tipo_binarizacion, cv2.THRESH_BINARY)
+        _, resultado = cv2.threshold(corte_u8, 127, 255, tipo)
+        return resultado
 
     def transformacion_morfologica(self, indice_axial, tipo, tam_kernel):
         """Corregido typo + robustez"""

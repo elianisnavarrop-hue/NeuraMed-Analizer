@@ -333,10 +333,11 @@ class MainWindow(QMainWindow):
 class VentanaZoom(QMainWindow):
     """Ventana de Zoom y Recorte - Versión con escalado forzado"""
 
-    def __init__(self, dicom_model):
+    def __init__(self, dicom_model, controller=None):
         super().__init__()
         uic.loadUi("view/ventana_zoom.ui", self)
         self.dicom_model = dicom_model
+        self.controller = controller
         
         self.original_image = None
         self.current_roi = None
@@ -364,11 +365,25 @@ class VentanaZoom(QMainWindow):
         self.lbl_pixel = self.findChild(QLabel, "lblpixel")
         self.lbl_slice = self.findChild(QLabel, "lblslice")
 
+        self.val_pixel_spacing = self.findChild(QLineEdit, "val_pixel_spacing")
+        self.val_slice_thickness = self.findChild(QLineEdit, "val_slice_thickness")
+
+        self.aplicar_segmentacion = self.findChild(QPushButton, "aplicar_segmentacion")
+        self.aplicar_transf_morph = self.findChild(QPushButton, "aplicar_transf_morph")
+
+        self.lbl_pixel = self.findChild(QLabel, "lblpixel")
+        self.lbl_slice = self.findChild(QLabel, "lblslice")
+
     def _conectar_botones(self):
         if self.btn_aplicar_zoom:
             self.btn_aplicar_zoom.clicked.connect(self.aplicar_zoom_y_dibujar)
         if self.btn_guardar_img:
             self.btn_guardar_img.clicked.connect(self.guardar_imagen)
+
+        if self.aplicar_segmentacion:
+            self.aplicar_segmentacion.clicked.connect(self.aplicar_segmentacion_zoom)
+        if self.aplicar_transf_morph:
+            self.aplicar_transf_morph.clicked.connect(self.aplicar_morfologia_zoom)
 
     def _setup_mouse_interaction(self):
         if not self.widget_original:
@@ -399,6 +414,13 @@ class VentanaZoom(QMainWindow):
 
             # Forzar escalado inmediato y después del resize
             self._update_displayed_image()
+
+            if self.val_pixel_spacing:
+                ps = self.dicom_model.pixel_spacing
+                self.val_pixel_spacing.setText(f"{ps[0]:.3f} x {ps[1]:.3f}")
+
+            if self.val_slice_thickness:
+                self.val_slice_thickness.setText(f"{self.dicom_model.slice_thickness:.3f}")
             
             # Conectar evento de resize para que se actualice si la ventana cambia de tamaño
             self.widget_original.resizeEvent = self._on_original_resize
@@ -516,6 +538,63 @@ class VentanaZoom(QMainWindow):
         scaled_zoom = QPixmap.fromImage(qimg_zoom).scaled(
             self.widget_zoom.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.label_zoom.setPixmap(scaled_zoom)
+
+    def aplicar_segmentacion_zoom(self):
+        """Aplica segmentación usando los parámetros de la ventana principal"""
+        if self.original_image is None or not self.controller:
+            QMessageBox.warning(self, "Error", "No hay imagen o controlador")
+            return
+
+        tipo = self.controller.main_window.seleccion_segmentacion.currentText()
+        if tipo in ["Seleccione una opcion...", ""]:
+            QMessageBox.warning(self, "Advertencia", "Seleccione un tipo de segmentación")
+            return
+
+        try:
+            resultado = self.dicom_model.segmentar(self.indice_axial, tipo)
+            self._mostrar_resultado_en_zoom(resultado)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def aplicar_morfologia_zoom(self):
+        """Aplica transformación morfológica usando los parámetros de la ventana principal"""
+        if self.original_image is None or not self.controller:
+            QMessageBox.warning(self, "Error", "No hay imagen o controlador")
+            return
+
+        tipo = self.controller.main_window.seleccion_morfo.currentText()
+        kernel = self.controller.main_window.spinkernel.value()
+
+        if tipo in ["Seleccione una transformacion Morfologica...", ""]:
+            QMessageBox.warning(self, "Advertencia", "Seleccione una transformación morfológica")
+            return
+
+        try:
+            resultado = self.dicom_model.transformacion_morfologica(self.indice_axial, tipo, kernel)
+            self._mostrar_resultado_en_zoom(resultado)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def _mostrar_resultado_en_zoom(self, imagen_procesada):
+        """Muestra el resultado en widget_3"""
+        if not self.widget_zoom:
+            return
+
+        img_u8 = self.dicom_model.normalizar_uint8(imagen_procesada)
+        img_bgr = cv2.cvtColor(img_u8, cv2.COLOR_GRAY2BGR)
+        h, w = img_bgr.shape[:2]
+        qimg = QImage(img_bgr.data, w, h, w*3, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(qimg).scaled(
+            self.widget_zoom.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+
+        if not self.label_zoom:
+            self.label_zoom = QLabel(self.widget_zoom)
+            layout = QVBoxLayout(self.widget_zoom)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(self.label_zoom)
+
+        self.label_zoom.setPixmap(pixmap)   
 
     def guardar_imagen(self):
         if not self.current_roi or self.original_image is None:

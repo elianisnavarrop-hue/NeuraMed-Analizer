@@ -276,22 +276,19 @@ class BioMonitorController:
                                f"No se pudo guardar el NIfTI:\n{str(e)}")
 
     def abrir_ventana_zoom(self):
-        """Abre ventana de zoom con el corte axial actual"""
         if self.dicom_model.volumen_3d is None:
-            QMessageBox.warning(self.main_window, "Advertencia", 
-                              "Cargue primero un estudio DICOM")
+            QMessageBox.warning(self.main_window, "Advertencia", "Cargue primero un estudio DICOM")
             return
 
         try:
             indice = self.main_window.slider_axial.value() if hasattr(self.main_window, 'slider_axial') else 0
             corte = self.dicom_model.get_corte_axial(indice)
 
-            self.zoom_window = VentanaZoom(self.dicom_model)
+            self.zoom_window = VentanaZoom(self.dicom_model, controller=self)  # ← Pasar controller
             self.zoom_window.mostrar_imagen(corte, indice)
             self.zoom_window.show()
         except Exception as e:
-            QMessageBox.critical(self.main_window, "Error", 
-                               f"No se pudo abrir la ventana de zoom:\n{str(e)}")
+            QMessageBox.critical(self.main_window, "Error", f"No se pudo abrir zoom:\n{str(e)}")
 
     # ====================== MÓDULO SEÑALES ======================
     def cargar_senal(self):

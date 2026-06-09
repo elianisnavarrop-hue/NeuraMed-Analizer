@@ -1,0 +1,195 @@
+@startuml
+title Diagrama de Clases - NeuraMed Analizer (MVC)
+skinparam classAttributeIconSize 0
+
+' ================= PAQUETE DE MODELOS =================
+package "Model" <<Folder>> {
+    
+    class Paciente <<dataclass>> {
+        + id_paciente: str
+        + nombre: str
+        + edad: int
+        + bpm: float
+        + spo2: float
+        + temperatura: float
+        + id_db: int
+        + calcular_riesgo(): str
+        + get_color(): str
+    }
+
+    class DatabaseManager {
+        - db_path: Path
+        - conn: sqlite3.Connection
+        + __init__(db_name: str)
+        - _create_tables()
+        + login(username, password): tuple
+        + guardar_paciente(p: Paciente)
+        + cargar_pacientes(): list
+        + cerrar()
+    }
+
+    class ModeloUsuario {
+        - cliente: MongoClient
+        - db: Database
+        - col_usuarios: Collection
+        - col_sesiones: Collection
+        - usuario_activo: dict
+        + __init__()
+        - _crear_usuarios_iniciales()
+        + validar_login(usuario, contrasena): dict
+        + registrar_sesion(ruta_foto): dict
+        + get_usuario_activo(): dict
+    }
+
+    class ModeloCamara {
+        - captura: cv2.VideoCapture
+        - frame_actual: ndarray
+        - carpeta_fotos: str
+        + __init__()
+        + iniciar_camara(indice: int): bool
+        + get_frame(): tuple
+        + capturar_y_guardar(nombre_usuario: str): str
+        + detener_camara()
+    }
+
+    class ModeloDICOM {
+        - ruta_carpeta: str
+        - archivos_dcm: list
+        - volumen_3d: ndarray
+        + metadata: dict
+        + pixel_spacing: list
+        + slice_thickness: float
+        + cargar_dicom(ruta_carpeta: str): tuple
+        + get_corte_axial(indice: int): ndarray
+        + segmentar(indice_axial: int, tipo_binarizacion: str): ndarray
+        + transformacion_morfologica(indice, tipo, tam_kernel): ndarray
+        + convertir_a_nifti(ruta_salida: str): str
+    }
+
+    class SignalProcessor {
+        - data_3d: ndarray
+        - data_2d: ndarray
+        - fs: float
+        - events: list
+        + load_mat_file(file_path: str): bool
+        + detect_events(canal, signal_type): list
+        + agregar_ruido(canal, noise_level): tuple
+        + compute_statistics(axis: int): tuple
+        + plot_signal(canal, inicio, fin, detect_events): Figure
+    }
+
+    class TabularProcessor {
+        - df: DataFrame
+        - filename: str
+        + load_file(file_path: str): bool
+        + get_sample(n: int): DataFrame
+        + plot_individual_columns(columns: list, fig: Figure): bool
+        + scatter_plot(col_x: str, col_y: str, fig: Figure): bool
+    }
+}
+
+' ================= PAQUETE DE VISTAS =================
+package "View (PyQt5)" <<Folder>> {
+    
+    class BienvenidaWindow {
+        - controller: BioMonitorController
+        + __init__(controller)
+    }
+
+    class LoginWindow {
+        - controller: BioMonitorController
+        + __init__(controller)
+        + attempt_login()
+    }
+
+    class VentanaAutenticacion {
+        - controller: BioMonitorController
+        - timer: QTimer
+        + __init__(controller)
+        + iniciar_camara()
+        + actualizar_frame_camara()
+    }
+
+    class MainWindow {
+        - controller: BioMonitorController
+        + figure_senal: Figure
+        + figure_datos: Figure
+        + __init__(controller)
+        + show_figure(new_fig: Figure)
+        + show_3_planes(axial, coronal, sagittal)
+        + mostrar_metadatos(metadata: dict)
+        - _setup_matplotlib()
+    }
+
+    class VentanaZoom {
+        - dicom_model: ModeloDICOM
+        - controller: BioMonitorController
+        - current_roi: tuple
+        + __init__(dicom_model, controller)
+        + mostrar_imagen(corte, indice_axial)
+        + aplicar_zoom_y_dibujar()
+        + guardar_imagen()
+        - mouse_press()
+        - _finalize_roi()
+    }
+}
+
+' ================= PAQUETE CONTROLADOR =================
+package "Controller" <<Folder>> {
+    
+    class BioMonitorController {
+        - db: DatabaseManager
+        - modelo_usuario: ModeloUsuario
+        - modelo_camara: ModeloCamara
+        - dicom_model: ModeloDICOM
+        - signal_proc: SignalProcessor
+        - tabular_proc: TabularProcessor
+        -- Vistas --
+        - bienvenida: BienvenidaWindow
+        - login_window: LoginWindow
+        - main_window: MainWindow
+        - zoom_window: VentanaZoom
+        -- Métodos --
+        + run()
+        + validar_login(username, password)
+        + guardar_foto_autenticacion()
+        + cargar_carpeta_dicom()
+        + aplicar_transformacion()
+        + cargar_senal()
+        + actualizar_plot_senal()
+        + cargar_dataset_tabular()
+        + graficar_columnas()
+    }
+}
+
+' ================= RELACIONES =================
+
+' Composición (El controlador ES DUEÑO de los modelos)
+BioMonitorController *-- "1" DatabaseManager
+BioMonitorController *-- "1" ModeloUsuario
+BioMonitorController *-- "1" ModeloCamara
+BioMonitorController *-- "1" ModeloDICOM
+BioMonitorController *-- "1" SignalProcessor
+BioMonitorController *-- "1" TabularProcessor
+
+' Composición (El controlador CREA las vistas)
+BioMonitorController *-- "1" BienvenidaWindow : "crea"
+BioMonitorController *-- "1" LoginWindow : "crea"
+BioMonitorController *-- "1" VentanaAutenticacion : "crea"
+BioMonitorController *-- "1" MainWindow : "crea"
+BioMonitorController *-- "1" VentanaZoom : "crea"
+
+' Asociación bidireccional (Las vistas conocen al controlador)
+BienvenidaWindow --> "1" BioMonitorController : "avisa"
+LoginWindow --> "1" BioMonitorController : "avisa"
+VentanaAutenticacion --> "1" BioMonitorController : "avisa"
+MainWindow --> "1" BioMonitorController : "avisa"
+VentanaZoom --> "1" BioMonitorController : "avisa"
+
+' Dependencias de Modelos a Vistas directamente (Inyección por constructor)
+VentanaZoom --> "1" ModeloDICOM : "usa directamente"
+
+' Dependencias internas de los modelos
+DatabaseManager ..> Paciente : "crea/lee"
+
+@enduml

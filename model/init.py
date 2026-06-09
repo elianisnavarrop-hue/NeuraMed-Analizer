@@ -8,5 +8,6 @@ from .signal_processor import SignalProcessor
 from .tabular_processor import TabularProcessor
 from .modelo_usuario import ModeloUsuario
 from .modelo_dicom import ModeloDICOM
+from .modelo_camara import ModeloCamara
 
-__all__ = ['Paciente', 'DatabaseManager', 'DicomProcessor', 'SignalProcessor', 'TabularProcessor', 'ModeloUsuario', 'ModeloDICOM']
+__all__ = ['Paciente', 'DatabaseManager', 'DicomProcessor', 'SignalProcessor', 'TabularProcessor', 'ModeloUsuario', 'ModeloDICOM', 'ModeloCamara']
